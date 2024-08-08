@@ -1,71 +1,36 @@
-import 'dart:ui';
-
 import 'package:camera/camera.dart';
-import 'package:firebase_ml_vision/firebase_ml_vision.dart';
-import 'package:flutter/material.dart';
+import 'package:google_ml_kit/google_ml_kit.dart';
 
 Future<void> processImage(CameraController cameraController) async {
-  final image = await cameraController.takePicture();
-  final firebaseVisionImage = FirebaseVisionImage.fromFile(image);
+  try {
+    // Ensure the camera is initialized
+    await cameraController.initialize();
 
-  // Face detection
-  final faceDetector = FirebaseVision.instance.faceDetector();
-  final List<Face> faces = await faceDetector.processImage(firebaseVisionImage);
+    // Capture the image
+    final image = await cameraController.takePicture();
 
-  // QR code detection
-  final barcodeDetector = FirebaseVision.instance.barcodeDetector();
-  final List<Barcode> barcodes = await barcodeDetector.processImage(firebaseVisionImage);
+    // Convert the image to the format required by google_ml_kit
+    final inputImage = InputImage.fromFilePath(image.path);
 
-  // Process the detected face and QR code
-  _drawDetections(firebaseVisionImage.inputImageData!.size, faces, barcodes);
-}
+    // Initialize the face detector
+    final faceDetector = GoogleMlKit.vision.faceDetector();
 
-void _drawDetections(
-    Size imageSize,
-    List<Face> faces,
-    List<Barcode> barcodes,
-    ) {
-  final recorder = PictureRecorder();
-  final canvas = Canvas(recorder);
+    // Process the image for face detection
+    final faces = await faceDetector.processImage(inputImage);
 
-  // Draw bounding boxes around the detected faces
-  for (final face in faces) {
-    final rect = _normalizeRect(
-      face.boundingBox,
-      imageSize.width,
-      imageSize.height,
-    );
-    _drawBoundingBox(canvas, rect, Colors.red);
+    // Check if faces were detected
+    if (faces.isNotEmpty) {
+      print('Faces detected: ${faces.length}');
+      for (var face in faces) {
+        print('Face bounding box: ${face.boundingBox}');
+      }
+    } else {
+      print('No faces detected.');
+    }
+
+    // Don't forget to release resources
+    faceDetector.close();
+  } catch (e) {
+    print('Error processing image: $e');
   }
-
-  // Draw bounding boxes around the detected QR codes
-  for (final barcode in barcodes) {
-    final rect = _normalizeRect(
-      barcode.boundingBox,
-      imageSize.width,
-      imageSize.height,
-    );
-    _drawBoundingBox(canvas, rect, Colors.green);
-  }
-
-  final picture = recorder.endRecording();
-  // Use the picture to update the camera feed or save it as an image
-}
-
-Rect _normalizeRect(Rect rect, double imageWidth, double imageHeight) {
-  return Rect.fromLTRB(
-    rect.left / imageWidth,
-    rect.top / imageHeight,
-    rect.right / imageWidth,
-    rect.bottom / imageHeight,
-  );
-}
-
-void _drawBoundingBox(Canvas canvas, Rect rect, Color color) {
-  final paint = Paint()
-    ..color = color
-    ..strokeWidth = 4.0
-    ..style = PaintingStyle.stroke;
-
-  canvas.drawRect(rect, paint);
 }
